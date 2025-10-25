@@ -4,13 +4,18 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const { v4: uuidv4 } = require('uuid');
-
+const logger = require('./middleware/logger');
+const auth = require('./middleware/auth');
+const validateProduct = require('./middleware/validateProduct');
+const errorHandler = require('./middleware/errorHandler');
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware setup
 app.use(bodyParser.json());
+// Use custom logger middleware
+app.use(logger);
 
 // Sample in-memory products database
 let products = [
@@ -46,11 +51,53 @@ app.get('/', (req, res) => {
 });
 
 // TODO: Implement the following routes:
-// GET /api/products - Get all products
-// GET /api/products/:id - Get a specific product
-// POST /api/products - Create a new product
-// PUT /api/products/:id - Update a product
-// DELETE /api/products/:id - Delete a product
+
+// GET /api/products/:id
+app.get('/api/products/:id', (req, res) => {
+  const product = products.find(p => p.id === req.params.id);
+  if (!product) return res.status(404).json({ message: 'Product not found' });
+  res.json(product);
+});
+
+// POST /api/products
+app.post('/api/products', auth, validateProduct, (req, res) => {
+  const { name, description, price, category, inStock } = req.body;
+  const newProduct = {
+    id: uuidv4(),
+    name,
+    description,
+    price,
+    category,
+    inStock
+  };
+  products.push(newProduct);
+  res.status(201).json(newProduct);
+});
+
+// PUT /api/products/:id
+app.put('/api/products/:id', auth, validateProduct, (req, res) => {
+  const product = products.find(p => p.id === req.params.id);
+  if (!product) return res.status(404).json({ message: 'Product not found' });
+
+  const { name, description, price, category, inStock } = req.body;
+  product.name = name;
+  product.description = description;
+  product.price = price;
+  product.category = category;
+  product.inStock = inStock;
+
+  res.json(product);
+});
+
+// DELETE /api/products/:id
+app.delete('/api/products/:id', auth, (req, res) => {
+  const index = products.findIndex(p => p.id === req.params.id);
+  if (index === -1) return res.status(404).json({ message: 'Product not found' });
+
+  products.splice(index, 1);
+  res.json({ message: 'Product deleted' });
+});
+
 
 // Example route implementation for GET /api/products
 app.get('/api/products', (req, res) => {
@@ -61,6 +108,9 @@ app.get('/api/products', (req, res) => {
 // - Request logging
 // - Authentication
 // - Error handling
+
+// Use error handling middleware (should be after routes)
+app.use(errorHandler);
 
 // Start the server
 app.listen(PORT, () => {
